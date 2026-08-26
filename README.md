@@ -30,4 +30,4 @@ python src/evaluate.py
 - `results/pix2pix_results.png` — sketch → generated → real comparison
 
 ## Author
-Hessam Kaveh — Research Fellow, Italian Institute of Technology
+Hessam Kaveh — Research Fellow, Italian Institute of Technology (IIT)
