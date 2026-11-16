@@ -3,6 +3,8 @@
 Conditional GAN (cGAN) for paired image-to-image translation.
 Learns to transform sketch → realistic image using adversarial + L1 loss.
 
+**Data note:** this project uses a small procedurally generated (synthetic) dataset built in `src/dataset.py` (300 paired sketch/colour images of simple shapes), not real images. It is a didactic implementation: the numbers below show that the pipeline trains, and are not comparable to benchmark results.
+
 ## Architecture
 - **Generator**: U-Net with skip connections
 - **Discriminator**: PatchGAN classifier
@@ -26,8 +28,19 @@ python src/evaluate.py
 ```
 
 ## Results
-- `results/training_curves.png` — G/D loss curves
-- `results/pix2pix_results.png` — sketch → generated → real comparison
+
+| Metric | Value |
+|---|---|
+| Generator L1 loss (final epoch) | 0.266 |
+| Epochs | 15 |
+
+<p align="center"><img src="results/training_curves.png" width="85%"></p>
+
+> The discriminator loss collapses towards 0 (0.002 at the last epoch), a sign that D overpowers G on this toy data.
 
 ## Author
 Hessam Kaveh — Research Fellow, Italian Institute of Technology (IIT)
+
+## License
+
+Released under the [MIT License](LICENSE).
