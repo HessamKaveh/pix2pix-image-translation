@@ -3,7 +3,7 @@ import torch.nn as nn
 
 
 class UNetBlock(nn.Module):
-    """بلاک U-Net ساده"""
+    """Simple U-Net block"""
     def __init__(self, in_ch, out_ch, kernel_size=4, stride=2, padding=1, up=False):
         super().__init__()
         if up:
@@ -18,7 +18,7 @@ class UNetBlock(nn.Module):
 
 
 class Generator(nn.Module):
-    """سادگیِ Pix2Pix Generator"""
+    """Simplified Pix2Pix generator"""
     def __init__(self, in_ch=3, out_ch=3):
         super().__init__()
         
@@ -31,7 +31,7 @@ class Generator(nn.Module):
         # Bottleneck
         self.bottle = UNetBlock(256, 256, up=False)  # 16 -> 8
         
-        # Decoder (بدون skip connections برای اجتناب مشکل کانال)
+        # Decoder (no skip connections, to avoid channel mismatch)
         self.dec4 = UNetBlock(256, 256, up=True)   # 8 -> 16
         self.dec3 = UNetBlock(256, 128, up=True)   # 16 -> 32
         self.dec2 = UNetBlock(128, 64, up=True)    # 32 -> 64
@@ -54,7 +54,7 @@ class Generator(nn.Module):
         # Bottleneck
         b = self.bottle(e4)
         
-        # Decoder (بدون concatenation)
+        # Decoder (no concatenation)
         d4 = self.dec4(b)
         d3 = self.dec3(d4)
         d2 = self.dec2(d3)
@@ -67,7 +67,7 @@ class Generator(nn.Module):
 
 
 class PatchGANDiscriminator(nn.Module):
-    """PatchGAN: تفکیک تصاویر واقعی از تولید شده"""
+    """PatchGAN: tells real images from generated ones"""
     def __init__(self, in_ch=6):
         super().__init__()
         

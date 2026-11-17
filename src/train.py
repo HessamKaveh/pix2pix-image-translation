@@ -33,7 +33,7 @@ def train():
     history = {"g_loss": [], "d_loss": [], "l1_loss": []}
     best_l1 = float("inf")
 
-    lambda_l1 = 100  # وزن L1 loss
+    lambda_l1 = 100  # L1 loss weight
 
     for epoch in range(num_epochs):
         g_loss_sum = 0.0

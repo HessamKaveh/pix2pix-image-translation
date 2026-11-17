@@ -12,16 +12,16 @@ os.makedirs(DATA_DIR, exist_ok=True)
 
 
 class SyntheticPix2PixDataset(Dataset):
-    """شبیه‌سازی: sketch → عکس (دیتاست ساخت شده)"""
+    """Simulation: sketch -> photo (generated dataset)"""
     def __init__(self, num_samples=300, img_size=256):
         self.num_samples = num_samples
         self.img_size = img_size
         
-        # ایجاد دیتاست
+        # build the dataset
         self._create_dataset()
     
     def _create_dataset(self):
-        """تولید تصاویر sketch و واقعی"""
+        """Generate sketch and real images"""
         self.sketches = []
         self.reals = []
         
@@ -31,19 +31,19 @@ class SyntheticPix2PixDataset(Dataset):
             self.reals.append(real)
     
     def _generate_pair(self, idx):
-        """تولید جفت: sketch + تصویر واقعی"""
+        """Generate a pair: sketch + real image"""
         np.random.seed(idx)
         random.seed(idx)
         
-        # تصویر واقعی: رنگی
+        # real image: colour
         real = Image.new('RGB', (self.img_size, self.img_size), color='white')
         draw_real = ImageDraw.Draw(real)
         
-        # sketch: سیاه و سفید
+        # sketch: black and white
         sketch = Image.new('RGB', (self.img_size, self.img_size), color='white')
         draw_sketch = ImageDraw.Draw(sketch)
         
-        # رسم اشکال تصادفی
+        # draw random shapes
         num_shapes = random.randint(3, 6)
         
         for _ in range(num_shapes):
@@ -55,10 +55,10 @@ class SyntheticPix2PixDataset(Dataset):
                 x2 = x1 + random.randint(30, 100)
                 y2 = y1 + random.randint(30, 100)
                 
-                # Sketch: خط سیاه
+                # sketch: black outline
                 draw_sketch.rectangle([x1, y1, x2, y2], outline='black', width=2)
                 
-                # Real: مستطیل رنگی
+                # real: coloured rectangle
                 color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
                 draw_real.rectangle([x1, y1, x2, y2], fill=color, outline='black', width=2)
             
@@ -79,7 +79,7 @@ class SyntheticPix2PixDataset(Dataset):
                 color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
                 draw_real.line([x1, y1, x2, y2], fill=color, width=3)
         
-        # تبدیل به tensor
+        # convert to tensor
         sketch_tensor = torch.from_numpy(np.array(sketch).transpose(2, 0, 1)).float() / 255.0
         real_tensor = torch.from_numpy(np.array(real).transpose(2, 0, 1)).float() / 255.0
         
