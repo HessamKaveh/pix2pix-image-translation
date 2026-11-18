@@ -1,95 +1,90 @@
+"""pix2pix networks (Isola et al., CVPR 2017).
+
+Generator: U-Net-256 (8 down / 8 up, skip connections, dropout in the 3 innermost decoder blocks).
+Discriminator: 70x70 PatchGAN (C64-C128-C256-C512), conditioned on the input image.
+"""
 import torch
 import torch.nn as nn
 
 
-class UNetBlock(nn.Module):
-    """Simple U-Net block"""
-    def __init__(self, in_ch, out_ch, kernel_size=4, stride=2, padding=1, up=False):
+def init_weights(m):
+    if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
+        nn.init.normal_(m.weight, 0.0, 0.02)
+        if m.bias is not None:
+            nn.init.zeros_(m.bias)
+    elif isinstance(m, nn.BatchNorm2d):
+        nn.init.normal_(m.weight, 1.0, 0.02)
+        nn.init.zeros_(m.bias)
+
+
+class Down(nn.Module):
+    def __init__(self, cin, cout, norm=True):
         super().__init__()
-        if up:
-            self.conv = nn.ConvTranspose2d(in_ch, out_ch, kernel_size, stride, padding)
-        else:
-            self.conv = nn.Conv2d(in_ch, out_ch, kernel_size, stride, padding)
-        self.bn = nn.BatchNorm2d(out_ch)
-        self.relu = nn.ReLU(inplace=True)
-    
+        layers = [nn.Conv2d(cin, cout, 4, 2, 1, bias=not norm)]
+        if norm:
+            layers.append(nn.BatchNorm2d(cout))
+        layers.append(nn.LeakyReLU(0.2, True))
+        self.net = nn.Sequential(*layers)
+
     def forward(self, x):
-        return self.relu(self.bn(self.conv(x)))
+        return self.net(x)
 
 
-class Generator(nn.Module):
-    """Simplified Pix2Pix generator"""
-    def __init__(self, in_ch=3, out_ch=3):
+class Up(nn.Module):
+    def __init__(self, cin, cout, dropout=False):
         super().__init__()
-        
-        # Encoder
-        self.enc1 = UNetBlock(in_ch, 32, up=False)  # 256 -> 128
-        self.enc2 = UNetBlock(32, 64, up=False)     # 128 -> 64
-        self.enc3 = UNetBlock(64, 128, up=False)    # 64 -> 32
-        self.enc4 = UNetBlock(128, 256, up=False)   # 32 -> 16
-        
-        # Bottleneck
-        self.bottle = UNetBlock(256, 256, up=False)  # 16 -> 8
-        
-        # Decoder (no skip connections, to avoid channel mismatch)
-        self.dec4 = UNetBlock(256, 256, up=True)   # 8 -> 16
-        self.dec3 = UNetBlock(256, 128, up=True)   # 16 -> 32
-        self.dec2 = UNetBlock(128, 64, up=True)    # 32 -> 64
-        self.dec1 = UNetBlock(64, 32, up=True)     # 64 -> 128
-        self.dec0 = UNetBlock(32, 32, up=True)     # 128 -> 256
-        
-        # Final output
-        self.final = nn.Sequential(
-            nn.Conv2d(32, out_ch, kernel_size=1),
-            nn.Tanh()
-        )
-    
+        layers = [nn.ConvTranspose2d(cin, cout, 4, 2, 1, bias=False), nn.BatchNorm2d(cout)]
+        if dropout:
+            layers.append(nn.Dropout(0.5))
+        layers.append(nn.ReLU(True))
+        self.net = nn.Sequential(*layers)
+
+    def forward(self, x, skip):
+        return torch.cat([self.net(x), skip], 1)
+
+
+class UNetGenerator(nn.Module):
+    def __init__(self, cin=3, cout=3, ngf=64):
+        super().__init__()
+        f = ngf
+        self.d1 = Down(cin, f, norm=False)       # 128
+        self.d2 = Down(f, 2 * f)                 # 64
+        self.d3 = Down(2 * f, 4 * f)             # 32
+        self.d4 = Down(4 * f, 8 * f)             # 16
+        self.d5 = Down(8 * f, 8 * f)             # 8
+        self.d6 = Down(8 * f, 8 * f)             # 4
+        self.d7 = Down(8 * f, 8 * f)             # 2
+        self.bottleneck = nn.Sequential(nn.Conv2d(8 * f, 8 * f, 4, 2, 1), nn.ReLU(True))  # 1
+        self.u1 = Up(8 * f, 8 * f, dropout=True)
+        self.u2 = Up(16 * f, 8 * f, dropout=True)
+        self.u3 = Up(16 * f, 8 * f, dropout=True)
+        self.u4 = Up(16 * f, 8 * f)
+        self.u5 = Up(16 * f, 4 * f)
+        self.u6 = Up(8 * f, 2 * f)
+        self.u7 = Up(4 * f, f)
+        self.out = nn.Sequential(nn.ConvTranspose2d(2 * f, cout, 4, 2, 1), nn.Tanh())
+
     def forward(self, x):
-        # Encoder
-        e1 = self.enc1(x)
-        e2 = self.enc2(e1)
-        e3 = self.enc3(e2)
-        e4 = self.enc4(e3)
-        
-        # Bottleneck
-        b = self.bottle(e4)
-        
-        # Decoder (no concatenation)
-        d4 = self.dec4(b)
-        d3 = self.dec3(d4)
-        d2 = self.dec2(d3)
-        d1 = self.dec1(d2)
-        d0 = self.dec0(d1)
-        
-        # Output
-        out = self.final(d0)
-        return out
+        e1 = self.d1(x); e2 = self.d2(e1); e3 = self.d3(e2); e4 = self.d4(e3)
+        e5 = self.d5(e4); e6 = self.d6(e5); e7 = self.d7(e6)
+        b = self.bottleneck(e7)
+        y = self.u1(b, e7); y = self.u2(y, e6); y = self.u3(y, e5); y = self.u4(y, e4)
+        y = self.u5(y, e3); y = self.u6(y, e2); y = self.u7(y, e1)
+        return self.out(y)
 
 
-class PatchGANDiscriminator(nn.Module):
-    """PatchGAN: tells real images from generated ones"""
-    def __init__(self, in_ch=6):
+class PatchDiscriminator(nn.Module):
+    """70x70 PatchGAN: outputs a 30x30 map of real/fake logits for a 256x256 input."""
+
+    def __init__(self, cin=6, ndf=64):
         super().__init__()
-        
-        self.model = nn.Sequential(
-            nn.Conv2d(in_ch, 64, kernel_size=4, stride=2, padding=1),
-            nn.LeakyReLU(0.2, inplace=True),
-            
-            nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(128),
-            nn.LeakyReLU(0.2, inplace=True),
-            
-            nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(256),
-            nn.LeakyReLU(0.2, inplace=True),
-            
-            nn.Conv2d(256, 512, kernel_size=4, stride=1, padding=1),
-            nn.BatchNorm2d(512),
-            nn.LeakyReLU(0.2, inplace=True),
-            
-            nn.Conv2d(512, 1, kernel_size=4, stride=1, padding=1),
+        self.net = nn.Sequential(
+            nn.Conv2d(cin, ndf, 4, 2, 1), nn.LeakyReLU(0.2, True),
+            nn.Conv2d(ndf, 2 * ndf, 4, 2, 1, bias=False), nn.BatchNorm2d(2 * ndf), nn.LeakyReLU(0.2, True),
+            nn.Conv2d(2 * ndf, 4 * ndf, 4, 2, 1, bias=False), nn.BatchNorm2d(4 * ndf), nn.LeakyReLU(0.2, True),
+            nn.Conv2d(4 * ndf, 8 * ndf, 4, 1, 1, bias=False), nn.BatchNorm2d(8 * ndf), nn.LeakyReLU(0.2, True),
+            nn.Conv2d(8 * ndf, 1, 4, 1, 1),
         )
-    
-    def forward(self, x, y):
-        xy = torch.cat([x, y], dim=1)
-        return self.model(xy)
+
+    def forward(self, cond, img):
+        return self.net(torch.cat([cond, img], 1))

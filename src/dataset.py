@@ -1,109 +1,49 @@
+"""CMP Facades paired dataset (pix2pix release).
+
+Each file is a 512x256 image: left half = photo (A), right half = label map (B).
+We translate label map -> photo (B -> A), as in the pix2pix paper.
+"""
 import os
-import numpy as np
-import torch
-from torch.utils.data import Dataset, DataLoader, random_split
-from PIL import Image, ImageDraw
 import random
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
-DATA_DIR = os.path.join(PROJECT_ROOT, "data")
-os.makedirs(DATA_DIR, exist_ok=True)
+import torch
+from PIL import Image
+from torch.utils.data import Dataset
+import torchvision.transforms.functional as TF
+
+DEFAULT_ROOT = os.environ.get(
+    "FACADES_ROOT", os.path.expanduser("~/datasets/portfolio/facades/facades"))
 
 
-class SyntheticPix2PixDataset(Dataset):
-    """Simulation: sketch -> photo (generated dataset)"""
-    def __init__(self, num_samples=300, img_size=256):
-        self.num_samples = num_samples
-        self.img_size = img_size
-        
-        # build the dataset
-        self._create_dataset()
-    
-    def _create_dataset(self):
-        """Generate sketch and real images"""
-        self.sketches = []
-        self.reals = []
-        
-        for idx in range(self.num_samples):
-            sketch, real = self._generate_pair(idx)
-            self.sketches.append(sketch)
-            self.reals.append(real)
-    
-    def _generate_pair(self, idx):
-        """Generate a pair: sketch + real image"""
-        np.random.seed(idx)
-        random.seed(idx)
-        
-        # real image: colour
-        real = Image.new('RGB', (self.img_size, self.img_size), color='white')
-        draw_real = ImageDraw.Draw(real)
-        
-        # sketch: black and white
-        sketch = Image.new('RGB', (self.img_size, self.img_size), color='white')
-        draw_sketch = ImageDraw.Draw(sketch)
-        
-        # draw random shapes
-        num_shapes = random.randint(3, 6)
-        
-        for _ in range(num_shapes):
-            shape_type = random.choice(['rect', 'circle', 'line'])
-            x1 = random.randint(20, self.img_size - 100)
-            y1 = random.randint(20, self.img_size - 100)
-            
-            if shape_type == 'rect':
-                x2 = x1 + random.randint(30, 100)
-                y2 = y1 + random.randint(30, 100)
-                
-                # sketch: black outline
-                draw_sketch.rectangle([x1, y1, x2, y2], outline='black', width=2)
-                
-                # real: coloured rectangle
-                color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
-                draw_real.rectangle([x1, y1, x2, y2], fill=color, outline='black', width=2)
-            
-            elif shape_type == 'circle':
-                r = random.randint(20, 50)
-                
-                draw_sketch.ellipse([x1, y1, x1+2*r, y1+2*r], outline='black', width=2)
-                
-                color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
-                draw_real.ellipse([x1, y1, x1+2*r, y1+2*r], fill=color, outline='black', width=2)
-            
-            elif shape_type == 'line':
-                x2 = random.randint(20, self.img_size - 20)
-                y2 = random.randint(20, self.img_size - 20)
-                
-                draw_sketch.line([x1, y1, x2, y2], fill='black', width=3)
-                
-                color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
-                draw_real.line([x1, y1, x2, y2], fill=color, width=3)
-        
-        # convert to tensor
-        sketch_tensor = torch.from_numpy(np.array(sketch).transpose(2, 0, 1)).float() / 255.0
-        real_tensor = torch.from_numpy(np.array(real).transpose(2, 0, 1)).float() / 255.0
-        
-        return sketch_tensor, real_tensor
-    
+class Facades(Dataset):
+    def __init__(self, root=DEFAULT_ROOT, split="train", load_size=286, crop_size=256):
+        self.dir = os.path.join(root, split)
+        self.files = sorted(os.listdir(self.dir), key=lambda f: int(os.path.splitext(f)[0]))
+        self.train = split == "train"
+        self.load_size, self.crop_size = load_size, crop_size
+
     def __len__(self):
-        return self.num_samples
-    
-    def __getitem__(self, idx):
-        return self.sketches[idx], self.reals[idx]
+        return len(self.files)
 
+    def __getitem__(self, i):
+        ab = Image.open(os.path.join(self.dir, self.files[i])).convert("RGB")
+        w, h = ab.size
+        photo = ab.crop((0, 0, w // 2, h))
+        label = ab.crop((w // 2, 0, w, h))
 
-def get_dataloaders(batch_size=16):
-    full_dataset = SyntheticPix2PixDataset(num_samples=300)
-    
-    train_size = int(0.8 * len(full_dataset))
-    val_size = len(full_dataset) - train_size
-    
-    train_set, val_set = random_split(
-        full_dataset, [train_size, val_size],
-        generator=torch.Generator().manual_seed(42)
-    )
-    
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=2)
-    val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False, num_workers=2)
-    
-    return train_loader, val_loader
+        if self.train:
+            # random jitter: resize to 286, random 256 crop, random horizontal flip
+            label = TF.resize(label, [self.load_size] * 2, TF.InterpolationMode.BICUBIC)
+            photo = TF.resize(photo, [self.load_size] * 2, TF.InterpolationMode.BICUBIC)
+            top = random.randint(0, self.load_size - self.crop_size)
+            left = random.randint(0, self.load_size - self.crop_size)
+            label = TF.crop(label, top, left, self.crop_size, self.crop_size)
+            photo = TF.crop(photo, top, left, self.crop_size, self.crop_size)
+            if random.random() < 0.5:
+                label, photo = TF.hflip(label), TF.hflip(photo)
+        else:
+            label = TF.resize(label, [self.crop_size] * 2, TF.InterpolationMode.BICUBIC)
+            photo = TF.resize(photo, [self.crop_size] * 2, TF.InterpolationMode.BICUBIC)
+
+        to = lambda im: TF.normalize(TF.to_tensor(im), [0.5] * 3, [0.5] * 3)  # [-1, 1]
+        return to(label), to(photo), self.files[i]
