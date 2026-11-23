@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "Pix2Pix: Image-to-Image Translation on CMP Facades"
+authors:
+  - family-names: Kaveh
+    given-names: Hessam
+    affiliation: "Istituto Italiano di Tecnologia (IIT)"
+repository-code: "https://github.com/HessamKaveh/pix2pix-image-translation"
+license: MIT
+version: 1.0.0
+date-released: 2026-11-23

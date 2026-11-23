@@ -6,7 +6,6 @@ We translate label map -> photo (B -> A), as in the pix2pix paper.
 import os
 import random
 
-import torch
 from PIL import Image
 from torch.utils.data import Dataset
 import torchvision.transforms.functional as TF

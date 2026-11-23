@@ -1,5 +1,7 @@
 # Pix2Pix: Image-to-Image Translation on CMP Facades
 
+[![CI](https://github.com/HessamKaveh/pix2pix-image-translation/actions/workflows/ci.yml/badge.svg)](https://github.com/HessamKaveh/pix2pix-image-translation/actions/workflows/ci.yml) ![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg) ![PyTorch](https://img.shields.io/badge/PyTorch-2.x-ee4c2c.svg?logo=pytorch&logoColor=white) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A from-scratch PyTorch reimplementation of **pix2pix** (Isola et al., *Image-to-Image Translation with Conditional Adversarial Networks*, CVPR 2017), trained on the real **CMP Facades** dataset to translate architectural label maps into photos. It includes an **L1-only ablation**, which shows what the adversarial loss adds.
 
 <p align="center"><img src="results/facades_test_samples.png" width="80%"></p>
